@@ -1,7 +1,7 @@
 package cc.unitmesh.devti.sketch.ui.plan
 
 import cc.unitmesh.devti.AutoDevIcons
-import cc.unitmesh.devti.gui.AutoDevPlannerToolWindow
+import cc.unitmesh.devti.gui.planner.AutoDevPlannerToolWindow
 import cc.unitmesh.devti.gui.AutoDevPlannerToolWindowFactory
 import cc.unitmesh.devti.observer.agent.AgentStateService
 import cc.unitmesh.devti.observer.plan.MarkdownPlanParser
@@ -22,9 +22,6 @@ import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 
-/**
- * Toolbar factory for creating the plan sketch toolbar
- */
 class PlanToolbarFactory(private val project: Project) {
     fun createToolbar(component: JComponent): JComponent {
         val actionGroup = DefaultActionGroup(createToolbarActions())

@@ -1,8 +1,7 @@
 package cc.unitmesh.devti.language.completion
 
-import cc.unitmesh.devti.language.completion.provider.FileFunctionProvider
-import cc.unitmesh.devti.language.completion.provider.*
 import cc.unitmesh.devti.devin.dataprovider.BuiltinCommand
+import cc.unitmesh.devti.language.completion.provider.*
 import cc.unitmesh.devti.language.psi.DevInTypes
 import cc.unitmesh.devti.language.psi.DevInUsed
 import com.intellij.codeInsight.completion.CompletionContributor
@@ -20,7 +19,6 @@ class DevInCompletionContributor : CompletionContributor() {
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(DevInTypes.VARIABLE_ID), AgentToolOverviewCompletion())
 
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(DevInTypes.COMMAND_ID), BuiltinCommandCompletion())
-        extend(CompletionType.BASIC, PlatformPatterns.psiElement(DevInTypes.COMMAND_ID), ToolchainCommandCompletion())
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(DevInTypes.AGENT_ID), CustomAgentCompletion())
 
         extend(

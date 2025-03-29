@@ -19,9 +19,6 @@ data class CustomAgentContext(
 interface LanguageProcessor {
     val name: String
 
-    /**
-     * For CustomAgentExecutor to execute the code
-     */
     @RequiresBackgroundThread
     suspend fun execute(project: Project, context: CustomAgentContext): String
 
@@ -29,17 +26,13 @@ interface LanguageProcessor {
     suspend fun compile(project: Project, text: String): String
 
     @RequiresBackgroundThread
-    fun transpileCommand(project: Project, psiFile: PsiFile): List<BuiltinCommand>
+    suspend fun transpileCommand(project: Project, psiFile: PsiFile): List<BuiltinCommand>
 
     companion object {
         val EP_NAME = ExtensionPointName<LanguageProcessor>("cc.unitmesh.languageProcessor")
 
-        private fun instance(languageName: String): List<LanguageProcessor> {
-            return EP_NAME.extensionList.filter { it.name == languageName }
-        }
-
         fun devin(): LanguageProcessor? {
-            return instance("DevIn").firstOrNull()
+            return EP_NAME.extensionList.firstOrNull { it.name == "DevIn" }
         }
     }
 }

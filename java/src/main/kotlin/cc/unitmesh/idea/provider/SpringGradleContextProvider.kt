@@ -5,6 +5,7 @@ import cc.unitmesh.devti.prompting.code.TechStack
 import cc.unitmesh.devti.provider.context.ChatContextItem
 import cc.unitmesh.devti.provider.context.ChatContextProvider
 import cc.unitmesh.devti.provider.context.ChatCreationContext
+import cc.unitmesh.devti.util.relativePath
 import cc.unitmesh.idea.context.library.LibraryDescriptor
 import cc.unitmesh.idea.context.library.SpringLibrary
 import com.intellij.openapi.externalSystem.model.project.LibraryData
@@ -28,7 +29,7 @@ open class SpringGradleContextProvider : ChatContextProvider {
         return false
     }
 
-    override fun collect(project: Project, creationContext: ChatCreationContext): List<ChatContextItem> {
+    override suspend fun collect(project: Project, creationContext: ChatCreationContext): List<ChatContextItem> {
         val techStacks = convertTechStack(project)
 
         if (techStacks.coreFrameworks().isEmpty() && techStacks.testFrameworks().isEmpty()) {
@@ -36,38 +37,33 @@ open class SpringGradleContextProvider : ChatContextProvider {
         }
 
         val fileName = creationContext.sourceFile?.name ?: ""
+        val formattedTechStacks = techStacks.coreFrameworks.keys.joinToString(",")
 
-        fun isController() = fileName.endsWith("Controller.java") || fileName.endsWith("Controller.kt")
-        fun isService() =
-            fileName.endsWith("Service.java") || fileName.endsWith("ServiceImpl.java")
-                    || fileName.endsWith("Service.kt") || fileName.endsWith("ServiceImpl.kt")
-
-        when {
-            isController() -> {
-                return listOf(
-                    ChatContextItem(
-                        SpringGradleContextProvider::class,
-                        "You are working on a project that uses ${techStacks.coreFrameworks.keys.joinToString(",")} to build RESTful APIs."
-                    )
-                )
-            }
-
-            isService() -> {
-                return listOf(
-                    ChatContextItem(
-                        SpringGradleContextProvider::class,
-                        "You are working on a project that uses ${techStacks.coreFrameworks.keys.joinToString(",")} to build business logic."
-                    )
-                )
-            }
+        val configFile = SpringFrameworkConfigProvider().collect(project).map {
+            it.relativePath(project)
         }
 
-        return listOf(
-            ChatContextItem(
-                SpringGradleContextProvider::class,
-                "You are working on a project that uses ${techStacks.coreFrameworks.keys.joinToString(",")} to build business logic."
-            )
-        )
+        val baseMessages = buildContextMessage(fileName, formattedTechStacks, configFile)
+        return listOf(ChatContextItem(SpringGradleContextProvider::class, baseMessages))
+    }
+
+    private fun buildContextMessage(fileName: String, techStacks: String, configFiles: List<String>): String {
+        val contextType = when {
+            isControllerFile(fileName) -> "RESTful APIs"
+            isServiceFile(fileName) -> "business logic"
+            else -> "business logic"
+        }
+        
+        return "You are working on a project that uses $techStacks to build $contextType, configured with files: ${configFiles.joinToString(",")}."
+    }
+
+    private fun isControllerFile(fileName: String): Boolean {
+        return fileName.endsWith("Controller.java") || fileName.endsWith("Controller.kt")
+    }
+
+    private fun isServiceFile(fileName: String): Boolean {
+        return fileName.endsWith("Service.java") || fileName.endsWith("ServiceImpl.java") ||
+                fileName.endsWith("Service.kt") || fileName.endsWith("ServiceImpl.kt")
     }
 }
 
@@ -77,12 +73,19 @@ fun convertTechStack(project: Project): TechStack {
     val techStack = TechStack()
     var hasMatchSpringMvc = false
     var hasMatchSpringData = false
+    var hasMatchSpringCloud = false
 
     libraryDataList?.forEach {
         val name = it.groupId + ":" + it.artifactId
-        // sprint boot start with version
         if (name.startsWith("org.springframework.boot")) {
             techStack.coreFrameworks.putIfAbsent("Spring Boot " + it.version, true)
+        }
+
+        if (!hasMatchSpringCloud) {
+            if (name.startsWith("org.springframework.cloud")) {
+                techStack.coreFrameworks.putIfAbsent("Spring Cloud " + it.version, true)
+                hasMatchSpringCloud = true
+            }
         }
 
         if (!hasMatchSpringMvc) {
@@ -149,17 +152,16 @@ fun prepareGradleLibrary(project: Project): List<SimpleLibraryData>? {
         it.data as LibraryData
     }
 
-    // to SimpleLibraryData
-
     return libraryDataList?.map {
         SimpleLibraryData(it.groupId, it.artifactId, it.version)
     }
 }
 
 fun prepareMavenLibrary(project: Project): List<SimpleLibraryData> {
-    val projectDependencies: List<org.jetbrains.idea.maven.model.MavenArtifact> = MavenProjectsManager.getInstance(project).projects.flatMap {
-        it.dependencies
-    }
+    val projectDependencies: List<org.jetbrains.idea.maven.model.MavenArtifact> =
+        MavenProjectsManager.getInstance(project).projects.flatMap {
+            it.dependencies
+        }
 
     return projectDependencies.map {
         SimpleLibraryData(it.groupId, it.artifactId, it.version)

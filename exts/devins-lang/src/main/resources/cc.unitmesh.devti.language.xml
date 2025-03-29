@@ -24,7 +24,7 @@
                                 order="first"
                                 implementationClass="cc.unitmesh.devti.language.completion.DevInCompletionContributor"/>
         <completion.contributor language="DevIn"
-                                order="after devInCompletionContributor"
+                                order="last"
                                 implementationClass="cc.unitmesh.devti.language.completion.UserCustomCompletionContributor"/>
 
         <lang.foldingBuilder language="DevIn"

@@ -6,13 +6,20 @@ import cc.unitmesh.devti.gui.AutoDevToolWindowFactory
 import cc.unitmesh.devti.gui.chat.message.ChatActionType
 import cc.unitmesh.devti.observer.plan.AgentTaskEntry
 import cc.unitmesh.devti.observer.plan.TaskStatus
+import cc.unitmesh.devti.sketch.ui.AutoDevColors
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
+import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Font
 import javax.swing.*
+import javax.swing.border.CompoundBorder
 
 /**
  * Section Panel UI Component responsible for rendering and handling interactions for a plan section
@@ -23,71 +30,193 @@ class TaskSectionPanel(
     private val planItem: AgentTaskEntry,
     private val onStatusChange: () -> Unit
 ) : JBPanel<JBPanel<*>>(BorderLayout()) {
+
+    private val stepsPanel = JBPanel<JBPanel<*>>()
+    private var isExpanded = true
+    private var expandButton: JButton? = null
+    private var statusLabel: JLabel? = null
+    private val scrollPane: JBScrollPane
+    private val MAX_TITLE_LENGTH = 50
+
     init {
-        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        layout = BorderLayout()
         background = JBUI.CurrentTheme.ToolWindow.background()
-        border = JBUI.Borders.empty(2, 0)
+        border = CompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, JBColor.border()),
+            JBUI.Borders.empty(4, 0)
+        )
 
-        val titlePanel = createSectionTitlePanel()
-        add(titlePanel)
+        val headerPanel = createHeaderPanel()
+        add(headerPanel, BorderLayout.NORTH)
 
-        planItem.steps.forEach { task ->
-            val taskStepPanel = TaskStepPanel(project, task) {
+        stepsPanel.layout = BoxLayout(stepsPanel, BoxLayout.Y_AXIS)
+        stepsPanel.background = JBUI.CurrentTheme.ToolWindow.background()
+        stepsPanel.border = JBUI.Borders.emptyLeft(8)
+
+        refreshStepsPanel()
+
+        scrollPane = JBScrollPane(stepsPanel).apply {
+            border = BorderFactory.createEmptyBorder()
+            isOpaque = false
+            viewport.isOpaque = false
+            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+        }
+
+        add(scrollPane, BorderLayout.CENTER)
+        toggleStepsVisibility(isExpanded)
+    }
+
+    private fun createHeaderPanel(): JPanel {
+        val headerPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            background = JBUI.CurrentTheme.ToolWindow.background()
+            border = JBUI.Borders.empty(2)
+        }
+
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+            isOpaque = false
+        }
+
+        expandButton = JButton(if (isExpanded) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight).apply {
+            preferredSize = Dimension(20, 20)
+            margin = JBUI.emptyInsets()
+            isBorderPainted = false
+            isContentAreaFilled = false
+            toolTipText = if (isExpanded) "Collapse section" else "Expand section"
+
+            addActionListener { e ->
+                isExpanded = !isExpanded
+                icon = if (isExpanded) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight
+                toolTipText = if (isExpanded) "Collapse section" else "Expand section"
+                toggleStepsVisibility(isExpanded)
+                e.source = this
+            }
+        }
+
+        leftPanel.add(expandButton)
+
+        val statusIcon = when (planItem.status) {
+            TaskStatus.COMPLETED -> JLabel(AutoDevIcons.CHECKED)
+            TaskStatus.FAILED -> JLabel(AutoDevIcons.ERROR)
+            TaskStatus.IN_PROGRESS -> JLabel(AutoDevIcons.InProgress)
+            TaskStatus.TODO -> JLabel(AutoDevIcons.Build)
+        }
+        leftPanel.add(statusIcon)
+
+        val fullTitle = "${index + 1}. ${planItem.title}"
+        val displayTitle = if (planItem.title.length > MAX_TITLE_LENGTH) {
+            "${index + 1}. ${planItem.title.take(MAX_TITLE_LENGTH)}..."
+        } else {
+            fullTitle
+        }
+
+        val titleLabel = JLabel(displayTitle).apply {
+            font = font.deriveFont(Font.BOLD)
+            toolTipText = fullTitle
+        }
+        leftPanel.add(titleLabel)
+
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0)).apply {
+            isOpaque = false
+        }
+
+        statusLabel = JLabel(getStatusText(planItem.status)).apply {
+            foreground = getStatusColor(planItem.status)
+            font = font.deriveFont(Font.BOLD, 11f)
+            border = JBUI.Borders.empty(2)
+            preferredSize = Dimension(80, 16)
+        }
+
+        rightPanel.add(statusLabel)
+
+        if (planItem.status == TaskStatus.TODO || planItem.status == TaskStatus.FAILED) {
+            val executeButton = JButton("Execute").apply {
+                font = JBFont.medium()
+                addActionListener { executeSection() }
+            }
+
+            rightPanel.add(executeButton)
+        }
+
+        if (planItem.status == TaskStatus.FAILED) {
+            val retryButton = JButton(AutoDevIcons.REPAIR).apply {
+                font = JBFont.medium()
+                addActionListener { executeSection() }
+            }
+            rightPanel.add(retryButton)
+        }
+
+        headerPanel.add(leftPanel, BorderLayout.WEST)
+        headerPanel.add(rightPanel, BorderLayout.EAST)
+
+        return headerPanel
+    }
+
+    private fun toggleStepsVisibility(visible: Boolean) {
+        scrollPane.isVisible = visible
+        stepsPanel.isVisible = visible
+    }
+
+    private fun refreshStepsPanel() {
+        stepsPanel.removeAll()
+        planItem.steps.forEach { step ->
+            val taskStepPanel = TaskStepPanel(project, step) {
                 updateSectionStatus()
+                updateProgressAndStatus()
                 onStatusChange()
             }
 
-            add(taskStepPanel)
+            stepsPanel.add(taskStepPanel)
+            stepsPanel.add(Box.createVerticalStrut(2))  // Reduced spacing between steps
         }
     }
 
-    private fun createSectionTitlePanel(): JPanel {
-        val titlePanel = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
-            border = JBUI.Borders.empty(2)
-            background = JBUI.CurrentTheme.ToolWindow.background()
+    private fun executeSection() {
+        planItem.updateStatus(TaskStatus.IN_PROGRESS)
+        updateProgressAndStatus()
+
+        AutoDevToolWindowFactory.Companion.sendToSketchToolWindow(project, ChatActionType.SKETCH) { ui, _ ->
+            val content = planItem.title + "\n" + planItem.steps.joinToString("\n") { "   - " + it.step }
+            ui.sendInput(AutoDevBundle.message("sketch.plan.finish.task") + content)
         }
 
-        if (planItem.status == TaskStatus.TODO && !planItem.completed) {
-            titlePanel.add(createExecuteSectionButton())
-        }
-
-        val statusIndicator = when (planItem.status) {
-            TaskStatus.COMPLETED -> "✓"
-            TaskStatus.FAILED -> "!"
-            TaskStatus.IN_PROGRESS -> "*"
-            TaskStatus.TODO -> ""
-        }
-
-        val titleText = if (statusIndicator.isNotEmpty()) {
-            "<html><b>${index + 1}. ${planItem.title} [$statusIndicator]</b></html>"
-        } else {
-            "<html><b>${index + 1}. ${planItem.title}</b></html>"
-        }
-
-        val sectionLabel = JLabel(titleText)
-        sectionLabel.border = JBUI.Borders.emptyLeft(2)
-
-        titlePanel.add(sectionLabel)
-        return titlePanel
-    }
-
-    private fun createExecuteSectionButton(): JButton {
-        return JButton(AutoDevIcons.Run).apply {
-            border = BorderFactory.createEmptyBorder()
-            preferredSize = Dimension(20, 20)
-            toolTipText = "Execute Task"
-            background = JBUI.CurrentTheme.ToolWindow.background()
-
-            addActionListener {
-                AutoDevToolWindowFactory.Companion.sendToSketchToolWindow(project, ChatActionType.SKETCH) { ui, _ ->
-                    val content = planItem.title + "\n" + planItem.steps.joinToString("\n") { "   - " + it.step }
-                    ui.sendInput(AutoDevBundle.message("sketch.plan.finish.task") + content)
-                }
-            }
-        }
+        refreshStepsPanel()
+        revalidate()
+        repaint()
     }
 
     fun updateSectionStatus() {
         planItem.updateCompletionStatus()
+        updateProgressAndStatus()
+    }
+
+    private fun updateProgressAndStatus() {
+        statusLabel?.text = getStatusText(planItem.status)
+        statusLabel?.foreground = getStatusColor(planItem.status)
+
+        removeAll()
+        add(createHeaderPanel(), BorderLayout.NORTH)
+        add(stepsPanel, BorderLayout.CENTER)
+
+        revalidate()
+        repaint()
+    }
+
+    private fun getStatusText(status: TaskStatus): String {
+        return when (status) {
+            TaskStatus.COMPLETED -> "Completed"
+            TaskStatus.FAILED -> "Failed"
+            TaskStatus.IN_PROGRESS -> "In Progress"
+            TaskStatus.TODO -> "To Do"
+        }
+    }
+
+    private fun getStatusColor(status: TaskStatus): JBColor {
+        return when (status) {
+            TaskStatus.COMPLETED -> AutoDevColors.COMPLETED_STATUS
+            TaskStatus.FAILED -> AutoDevColors.FAILED_STATUS
+            TaskStatus.IN_PROGRESS -> AutoDevColors.IN_PROGRESS_STATUS
+            TaskStatus.TODO -> AutoDevColors.TODO_STATUS
+        }
     }
 }

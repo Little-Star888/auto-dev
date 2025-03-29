@@ -12,6 +12,7 @@ import cc.unitmesh.devti.inline.AutoDevInlineChatService
 import cc.unitmesh.devti.inline.fullHeight
 import cc.unitmesh.devti.inline.fullWidth
 import cc.unitmesh.devti.observer.agent.AgentStateService
+import cc.unitmesh.devti.observer.plan.reviewPlan
 import cc.unitmesh.devti.settings.coder.coderSetting
 import cc.unitmesh.devti.sketch.ui.ExtensionLangSketch
 import cc.unitmesh.devti.sketch.ui.LangSketch
@@ -40,7 +41,9 @@ import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBEmptyBorder
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.NonNls
 import java.awt.BorderLayout
 import java.awt.event.KeyAdapter
@@ -128,6 +131,18 @@ open class SketchToolWindow(
                         this.component.addActionListener {
                             AutoSketchMode.getInstance(project).isEnable = this.component.isSelected
                         }
+
+                        val connection = ApplicationManager.getApplication().messageBus.connect(this@SketchToolWindow)
+                        connection.subscribe(AutoSketchModeListener.TOPIC, object : AutoSketchModeListener {
+                            override fun start() {
+                                this@apply.component.isSelected = true
+                            }
+
+                            override fun done() {
+                                // do nothing
+                            }
+                        })
+
                     }
 
                     val buttonBox = Box.createHorizontalBox()
@@ -401,7 +416,9 @@ open class SketchToolWindow(
         afterRun()
 
         if (AutoSketchMode.getInstance(project).isEnable && !isInterrupted) {
-            AutoSketchMode.getInstance(project).start(text, this@SketchToolWindow.inputListener)
+            AutoDevCoroutineScope.scope(project).launch {
+                AutoSketchMode.getInstance(project).start(text, this@SketchToolWindow.inputListener)
+            }
         }
 
         this.revalidate()

@@ -24,6 +24,8 @@ import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.util.NlsSafe
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.elementType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 val CACHED_COMPILE_RESULT = mutableMapOf<String, DevInsCompiledResult>()
 
@@ -41,7 +43,7 @@ class DevInsCompiler(
     /**
      * Todo: build AST tree, then compile
      */
-    suspend fun compile(): DevInsCompiledResult {
+    suspend fun compile(): DevInsCompiledResult = withContext(Dispatchers.IO) {
         result.input = runReadAction { file.text }
         val children = runReadAction { file.children }
         children.forEach {
@@ -82,7 +84,7 @@ class DevInsCompiler(
         result.output = output.toString()
 
         CACHED_COMPILE_RESULT[file.name] = result
-        return result
+        return@withContext result
     }
 
     suspend fun processUsed(used: DevInUsed) {
@@ -204,7 +206,7 @@ class DevInsCompiler(
         output.append(result)
     }
 
-    fun toInsCommand(commandNode: BuiltinCommand, prop: String, used: DevInUsed, originCmdName: String): InsCommand = when (commandNode) {
+    suspend fun toInsCommand(commandNode: BuiltinCommand, prop: String, used: DevInUsed, originCmdName: String): InsCommand = when (commandNode) {
         BuiltinCommand.FILE -> {
             FileInsCommand(myProject, prop)
         }
@@ -277,7 +279,7 @@ class DevInsCompiler(
 
         BuiltinCommand.DATABASE -> {
             result.isLocalCommand = true
-            val shireCode: String? = lookupNextCode(used)?.text
+            val shireCode: String? = lookupNextCode(used)?.codeText()
             DatabaseInsCommand(myProject, prop, shireCode)
         }
 
@@ -288,13 +290,13 @@ class DevInsCompiler(
 
         BuiltinCommand.LOCAL_SEARCH -> {
             result.isLocalCommand = true
-            val shireCode: String? = lookupNextCode(used)?.text
+            val shireCode: String? = lookupNextCode(used)?.codeText()
             LocalSearchInsCommand(myProject, prop, shireCode)
         }
 
         BuiltinCommand.RIPGREP_SEARCH -> {
             result.isLocalCommand = true
-            val shireCode: String? = lookupNextCode(used)?.text
+            val shireCode: String? = lookupNextCode(used)?.codeText()
             RipgrepSearchInsCommand(myProject, prop, shireCode)
         }
 
@@ -340,12 +342,12 @@ class DevInsCompiler(
         }
     }
 
-    private fun executeExtensionFunction(
+    private suspend fun executeExtensionFunction(
         used: DevInUsed,
         prop: String,
         provider: ToolchainFunctionProvider
     ): PrintInsCommand {
-        val codeContent: String? = lookupNextCode(used)?.text
+        val codeContent: String? = runReadAction { lookupNextCode(used)?.text }
         val args = if (codeContent != null) {
             val code = CodeFence.parse(codeContent).text
             listOf(code)
@@ -405,8 +407,9 @@ class DevInsCompiler(
     }
 
     companion object {
-        fun transpileCommand(file: DevInFile): List<BuiltinCommand> {
-            val result = file.children.mapNotNull { it ->
+        suspend fun transpileCommand(file: DevInFile): List<BuiltinCommand> {
+            val children = runReadAction { file.children }
+            val result = children.mapNotNull { it ->
                 when (it.elementType) {
                     DevInTypes.USED -> {
                         val used = it as DevInUsed

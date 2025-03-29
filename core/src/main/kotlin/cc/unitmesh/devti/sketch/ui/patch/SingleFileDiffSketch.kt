@@ -7,7 +7,11 @@ import cc.unitmesh.devti.sketch.AutoSketchMode
 import cc.unitmesh.devti.sketch.lint.SketchCodeInspection
 import cc.unitmesh.devti.sketch.ui.LangSketch
 import cc.unitmesh.devti.template.context.TemplateContext
+import com.intellij.diff.DiffContentFactoryEx
+import com.intellij.diff.DiffContext
 import com.intellij.diff.editor.DiffVirtualFileBase
+import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.diff.tools.simple.SimpleDiffViewer
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.application.*
 import com.intellij.openapi.command.CommandProcessor
@@ -26,7 +30,6 @@ import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import com.intellij.testFramework.LightVirtualFile
-import com.intellij.ui.DarculaColors
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.HorizontalLayout
@@ -54,7 +57,8 @@ class SingleFileDiffSketch(
     private var patchActionPanel: JPanel? = null
     private val oldCode = currentFile.readText()
     private var appliedPatch = try {
-        GenericPatchApplier.apply(oldCode, patch.hunks)
+        val apply = GenericPatchApplier.apply(oldCode, patch.hunks)
+        apply
     } catch (e: Exception) {
         logger<SingleFileDiffSketch>().warn("Failed to apply patch: ${patch.beforeFileName}", e)
         null
@@ -74,7 +78,7 @@ class SingleFileDiffSketch(
             this@SingleFileDiffSketch.appliedPatch,
             this@SingleFileDiffSketch.patch
         )
-        
+
         val fileName = if (currentFile.name.contains("/")) {
             currentFile.name.substringAfterLast("/")
         } else {
@@ -84,15 +88,15 @@ class SingleFileDiffSketch(
         val filepathLabel = JBLabel(fileName).apply {
             icon = currentFile.fileType.icon
             border = BorderFactory.createEmptyBorder(2, 10, 2, 10)
-            
+
             val originalColor = foreground
             val hoverColor = JBColor(0x4A7EB3, 0x589DF6) // Blue color for hover state
-            
+
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent?) {
                     FileEditorManager.getInstance(myProject).openFile(currentFile, true)
                 }
-                
+
                 override fun mouseEntered(e: MouseEvent?) {
                     foreground = hoverColor
                     cursor = java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
@@ -101,7 +105,7 @@ class SingleFileDiffSketch(
                         BorderFactory.createEmptyBorder(2, 10, 1, 10)
                     )
                 }
-                
+
                 override fun mouseExited(e: MouseEvent?) {
                     foreground = originalColor
                     cursor = java.awt.Cursor.getDefaultCursor()
@@ -152,9 +156,50 @@ class SingleFileDiffSketch(
             it.add(patchActionPanel)
         }
         contentPanel.add(fileContainer, BorderLayout.CENTER)
-
         mainPanel.add(myHeaderPanel)
         mainPanel.add(contentPanel)
+
+        if (myProject.coderSetting.state.enableDiffViewer && appliedPatch?.status == ApplyPatchStatus.SUCCESS) {
+            invokeLater {
+                val diffPanel = createDiffViewer(oldCode, newCode)
+                mainPanel.add(diffPanel)
+            }
+        }
+    }
+
+    private fun createDiffViewer(oldCode: String, newCode: String): JComponent {
+        val diffFactory = DiffContentFactoryEx.getInstanceEx()
+        val currentDocContent = diffFactory.create(myProject, oldCode)
+        val newDocContent = diffFactory.create(newCode)
+
+        val diffRequest =
+            SimpleDiffRequest("Diff", currentDocContent, newDocContent, "Original", "AI suggestion")
+
+        val diffViewer = SimpleDiffViewer(object : DiffContext() {
+            override fun getProject() = myProject
+            override fun isWindowFocused() = false
+            override fun isFocusedInWindow() = false
+            override fun requestFocusInWindow() = Unit
+        }, diffRequest)
+        diffViewer.init()
+        
+        val wrapperPanel = JPanel(BorderLayout())
+        wrapperPanel.add(diffViewer.component, BorderLayout.CENTER)
+        
+        // Set preferred height to 25% of parent (will be determined when laid out)
+        // with a minimum of 200 pixels
+        wrapperPanel.preferredSize = java.awt.Dimension(
+            wrapperPanel.preferredSize.width,
+            maxOf(200, (mainPanel.height * 0.25).toInt())
+        )
+        
+        // Set maximum height to prevent excessive growth
+        wrapperPanel.maximumSize = java.awt.Dimension(
+            Int.MAX_VALUE,
+            maxOf(200, (mainPanel.height * 0.25).toInt())
+        )
+        
+        return wrapperPanel
     }
 
     private fun createActionButtons(
@@ -211,7 +256,7 @@ class SingleFileDiffSketch(
             icon = if (isAutoRepair && isFailedPatch) {
                 AutoDevIcons.InProgress
             } else {
-                AutoDevIcons.Repair
+                AutoDevIcons.REPAIR
             }
 
             toolTipText = AutoDevBundle.message("sketch.patch.action.repairDiff.tooltip")
@@ -227,7 +272,13 @@ class SingleFileDiffSketch(
                     filePatch.singleHunkPatchText
                 }
 
-                DiffRepair.applyDiffRepairSuggestion(myProject, editor, oldCode, failurePatch)
+                DiffRepair.applyDiffRepairSuggestion(myProject, editor, oldCode, failurePatch) { newCode ->
+                    createDiffViewer(oldCode, newCode).let { diffViewer ->
+                        mainPanel.add(diffViewer)
+                        mainPanel.revalidate()
+                        mainPanel.repaint()
+                    }
+                }
             }
         }
 
@@ -264,7 +315,7 @@ class SingleFileDiffSketch(
     fun runAutoLint(file: VirtualFile) {
         ApplicationManager.getApplication().invokeLater {
             val task = object : Task.Backgroundable(myProject, "Analysis code style", false) {
-                override fun run(indicator: ProgressIndicator ) {
+                override fun run(indicator: ProgressIndicator) {
                     lintCheckForNewCode(file)
                 }
             }
@@ -355,3 +406,4 @@ fun saveText(file: VirtualFile, text: String) {
         }
     }
 }
+

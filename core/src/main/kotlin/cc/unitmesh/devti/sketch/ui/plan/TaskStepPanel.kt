@@ -6,37 +6,24 @@ import cc.unitmesh.devti.gui.AutoDevToolWindowFactory
 import cc.unitmesh.devti.gui.chat.message.ChatActionType
 import cc.unitmesh.devti.observer.plan.AgentPlanStep
 import cc.unitmesh.devti.observer.plan.TaskStatus
-import com.intellij.ide.ui.UISettings
-import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.Presentation
-import com.intellij.openapi.actionSystem.impl.ActionButton
+import cc.unitmesh.devti.sketch.ui.AutoDevColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.ui.ColorUtil
 import com.intellij.ui.JBColor
-import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
-import java.awt.Color
+import java.awt.BorderLayout
+import java.awt.Cursor
 import java.awt.Dimension
+import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.BorderFactory
-import javax.swing.BoxLayout
-import javax.swing.JButton
-import javax.swing.JComponent
-import javax.swing.JLabel
-import javax.swing.JMenuItem
-import javax.swing.JPopupMenu
-import javax.swing.JTextPane
+import javax.swing.*
 import javax.swing.text.AttributeSet
-import javax.swing.text.DefaultStyledDocument
-import javax.swing.text.MutableAttributeSet
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import javax.swing.text.StyledDocument
@@ -51,45 +38,121 @@ class TaskStepPanel(
 ) : JBPanel<TaskStepPanel>() {
     private val taskLabel: JTextPane
     private val doc: StyledDocument
-    
     private val linkMap = mutableMapOf<IntRange, String>()
+    private var statusLabel: JLabel? = null
+    private val MAX_TEXT_LENGTH = 100 // Maximum characters to display before truncating
 
     init {
-        layout = BoxLayout(this, BoxLayout.X_AXIS)
-        border = JBUI.Borders.empty(4, 16, 4, 0)
+        layout = BorderLayout()
         background = JBUI.CurrentTheme.ToolWindow.background()
-        
-        taskLabel = JTextPane()
-        doc = taskLabel.styledDocument
-        
-        configureTaskLabel()
-        updateTaskLabel()
+        border = JBUI.Borders.empty(3, 2)
 
-        val statusIcon = createStatusIcon()
-        add(statusIcon)
-
-        if (task.status == TaskStatus.TODO) {
-            add(createExecuteButton())
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
+            isOpaque = false
         }
 
-        add(taskLabel)
+        val statusIcon = createStatusIcon()
+        leftPanel.add(statusIcon)
+
+        taskLabel = createTaskTextPane()
+        doc = taskLabel.styledDocument
+        updateTaskLabel()
+
+        val centerPanel = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(taskLabel, BorderLayout.CENTER)
+        }
+
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 2, 0)).apply {
+            isOpaque = false
+        }
+
+        statusLabel = JLabel(getStatusText(task.status)).apply {
+            foreground = getStatusColor(task.status)
+            font = font.deriveFont(Font.PLAIN, 9f)
+            border = JBUI.Borders.empty(1, 3)
+        }
+        rightPanel.add(statusLabel)
+
+        if (task.status == TaskStatus.TODO || task.status == TaskStatus.FAILED) {
+            val executeButton = JButton(AutoDevIcons.Run).apply {
+                preferredSize = Dimension(20, 20)
+                margin = JBUI.emptyInsets()
+                isBorderPainted = false
+                isContentAreaFilled = false
+                toolTipText = "Execute this step"
+                addActionListener { executeTask() }
+            }
+            rightPanel.add(executeButton)
+        }
+
+        if (task.status == TaskStatus.FAILED) {
+            val retryButton = JButton("Retry").apply {
+                margin = JBUI.insets(0, 2)  // Less margin
+                font = font.deriveFont(Font.PLAIN, 9f)  // Smaller font size
+                addActionListener { executeTask() }
+            }
+            rightPanel.add(retryButton)
+        }
+
+        add(leftPanel, BorderLayout.WEST)
+        add(centerPanel, BorderLayout.CENTER)
+        add(rightPanel, BorderLayout.EAST)
+
         setupContextMenu()
+        preferredSize = Dimension(preferredSize.width, Math.min(preferredSize.height, 28))
     }
 
-    private fun configureTaskLabel() {
+    private fun createStatusIcon(): JComponent {
+        return when (task.status) {
+            TaskStatus.COMPLETED -> JLabel(AutoDevIcons.CHECKED).apply {
+                preferredSize = Dimension(20, 16)
+                border = JBUI.Borders.empty()
+            }
+
+            TaskStatus.FAILED -> JLabel(AutoDevIcons.ERROR).apply {
+                preferredSize = Dimension(20, 16)
+                border = JBUI.Borders.empty()
+            }
+
+            TaskStatus.IN_PROGRESS -> JLabel(AutoDevIcons.Build).apply {
+                preferredSize = Dimension(20, 16)
+                border = JBUI.Borders.empty()
+            }
+
+            TaskStatus.TODO -> JCheckBox().apply {
+                border = JBUI.Borders.empty()
+                preferredSize = Dimension(20, 16)
+
+                isSelected = task.completed
+                addActionListener {
+                    task.completed = isSelected
+                    task.updateStatus(if (isSelected) TaskStatus.COMPLETED else TaskStatus.TODO)
+                    updateTaskLabel()
+                    updateStatusLabel()
+                    onStatusChange()
+                }
+
+                isBorderPainted = false
+                isContentAreaFilled = false
+            }
+        }
+    }
+
+    private fun createTaskTextPane(): JTextPane {
         val editorColorsManager = EditorColorsManager.getInstance()
         val currentScheme = editorColorsManager.schemeForCurrentUITheme
         val editorFontName = currentScheme.editorFontName
-        val editorFontSize = currentScheme.editorFontSize
+        val editorFontSize = currentScheme.editorFontSize - 1  // Slightly smaller font
 
-        taskLabel.apply {
+        return JTextPane().apply {
             isEditable = false
             isOpaque = false
             background = JBUI.CurrentTheme.ToolWindow.background()
-            border = JBUI.Borders.emptyLeft(5)
+            border = JBUI.Borders.emptyLeft(3)  // Less left padding
             font = Font(editorFontName, Font.PLAIN, editorFontSize)
             foreground = UIUtil.getLabelForeground()
-            
+
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) {
                     val offset = viewToModel2D(e.point)
@@ -104,111 +167,87 @@ class TaskStepPanel(
                         }
                     }
                 }
-                
+
                 override fun mouseEntered(e: MouseEvent) {
-                    setCursor(java.awt.Cursor(java.awt.Cursor.HAND_CURSOR))
+                    cursor = Cursor(Cursor.HAND_CURSOR)
                 }
-                
+
                 override fun mouseExited(e: MouseEvent) {
-                    setCursor(java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR))
+                    cursor = Cursor(Cursor.DEFAULT_CURSOR)
                 }
             })
-        }
-    }
-
-    private fun createStatusIcon(): JComponent {
-        return when (task.status) {
-            TaskStatus.COMPLETED -> JLabel(AutoDevIcons.Checked)
-            TaskStatus.FAILED -> JLabel(AutoDevIcons.Error)
-            TaskStatus.IN_PROGRESS -> JLabel(AutoDevIcons.Build)
-            TaskStatus.TODO -> JBCheckBox().apply {
-                isSelected = task.completed
-                addActionListener {
-                    task.completed = isSelected
-                    task.updateStatus(if (isSelected) TaskStatus.COMPLETED else TaskStatus.TODO)
-                    updateTaskLabel()
-                    onStatusChange()
-                }
-                isBorderPainted = false
-                isContentAreaFilled = false
-            }
-        }
-    }
-
-    private fun createExecuteButton(): JComponent {
-        val executeAction = object : AnAction(AutoDevIcons.Run) {
-            override fun actionPerformed(e: AnActionEvent) {
-                AutoDevToolWindowFactory.Companion.sendToSketchToolWindow(project, ChatActionType.SKETCH) { ui, _ ->
-                    ui.sendInput(AutoDevBundle.message("sketch.plan.finish.task") + task.step)
-                }
-            }
-        }
-        
-        val presentation = Presentation().apply {
-            icon = AutoDevIcons.Run
-            text = ""
-            description = AutoDevBundle.message("sketch.plan.execute.tooltip", "Execute")
-        }
-        
-        return ActionButton(executeAction, presentation, "TaskStepPanelExecuteAction", Dimension(22, 22)).apply {
-            background = JBUI.CurrentTheme.ToolWindow.background()
         }
     }
 
     private fun updateTaskLabel() {
         doc.remove(0, doc.length)
         linkMap.clear()
-        
+
         var text = task.step
         var currentPos = 0
-        
-        // Process each code file link
+
+        taskLabel.toolTipText = text
+        val needsTruncation = text.length > MAX_TEXT_LENGTH && task.codeFileLinks.isEmpty()
+        if (needsTruncation && task.codeFileLinks.isEmpty()) {
+            val truncatedText = text.take(MAX_TEXT_LENGTH) + "..."
+            doc.insertString(0, truncatedText, getStyleForStatus(task.status))
+            return
+        }
+
+        // If we have links or the text is short enough, use the normal rendering logic
         task.codeFileLinks.forEach { link ->
             val linkPattern = "[${link.displayText}](${link.filePath})"
             val linkIndex = text.indexOf(linkPattern)
-            
+
             if (linkIndex >= 0) {
                 val beforeLink = text.substring(0, linkIndex)
                 doc.insertString(currentPos, beforeLink, getStyleForStatus(task.status))
                 currentPos += beforeLink.length
-                
+
                 val linkStyle = SimpleAttributeSet().apply {
-                    StyleConstants.setForeground(this, Color(0x33, 0x66, 0xCC))
+                    StyleConstants.setForeground(this, AutoDevColors.LINK_COLOR)
                     StyleConstants.setUnderline(this, true)
                 }
-                
+
                 doc.insertString(currentPos, link.displayText, linkStyle)
                 linkMap[currentPos..(currentPos + link.displayText.length)] = link.filePath
-                
+
                 currentPos += link.displayText.length
                 text = text.substring(linkIndex + linkPattern.length)
             }
         }
-        
+
         if (text.isNotEmpty()) {
+            if (text.length > MAX_TEXT_LENGTH) {
+                text = text.take(MAX_TEXT_LENGTH) + "..."
+            }
             doc.insertString(currentPos, text, getStyleForStatus(task.status))
         }
     }
-    
+
     private fun getStyleForStatus(status: TaskStatus): AttributeSet {
         val style = SimpleAttributeSet()
-        
+
         when (status) {
             TaskStatus.COMPLETED -> {
                 StyleConstants.setStrikeThrough(style, true)
+                StyleConstants.setForeground(style, AutoDevColors.COMPLETED_TEXT)
             }
+
             TaskStatus.FAILED -> {
-                StyleConstants.setForeground(style, JBColor.RED)
+                StyleConstants.setForeground(style, AutoDevColors.FAILED_TEXT)
             }
+
             TaskStatus.IN_PROGRESS -> {
-                StyleConstants.setForeground(style, JBColor.BLUE)
+                StyleConstants.setForeground(style, AutoDevColors.IN_PROGRESS_TEXT)
                 StyleConstants.setItalic(style, true)
             }
+
             TaskStatus.TODO -> {
                 // Default styling
             }
         }
-        
+
         return style
     }
 
@@ -227,12 +266,97 @@ class TaskStepPanel(
             menuItem.addActionListener {
                 task.updateStatus(status)
                 updateTaskLabel()
+                updateStatusLabel()
                 onStatusChange()
+                refreshPanel()
             }
             taskPopupMenu.add(menuItem)
         }
 
         taskLabel.componentPopupMenu = taskPopupMenu
     }
-}
 
+    private fun executeTask() {
+        task.updateStatus(TaskStatus.IN_PROGRESS)
+        updateTaskLabel()
+        updateStatusLabel()
+        onStatusChange()
+
+        AutoDevToolWindowFactory.Companion.sendToSketchToolWindow(project, ChatActionType.SKETCH) { ui, _ ->
+            ui.sendInput(AutoDevBundle.message("sketch.plan.finish.task") + task.step)
+        }
+
+        refreshPanel()
+    }
+
+    private fun updateStatusLabel() {
+        statusLabel?.text = getStatusText(task.status)
+        statusLabel?.foreground = getStatusColor(task.status)
+    }
+
+    private fun refreshPanel() {
+        removeAll()
+
+        // Rebuild the panel components
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
+            isOpaque = false
+            add(createStatusIcon())
+        }
+
+        val centerPanel = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(taskLabel, BorderLayout.CENTER)
+        }
+
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0)).apply {
+            isOpaque = false
+            add(statusLabel)
+
+            if (task.status == TaskStatus.TODO || task.status == TaskStatus.FAILED) {
+                val executeButton = JButton(AutoDevIcons.Run).apply {
+                    preferredSize = Dimension(24, 24)
+                    margin = JBUI.insets(0)
+                    isBorderPainted = false
+                    isContentAreaFilled = false
+                    toolTipText = "Execute this step"
+                    addActionListener { executeTask() }
+                }
+                add(executeButton)
+            }
+
+            if (task.status == TaskStatus.FAILED) {
+                val retryButton = JButton("Retry").apply {
+                    margin = JBUI.insets(0, 3)
+                    font = font.deriveFont(Font.PLAIN, 10f)
+                    addActionListener { executeTask() }
+                }
+                add(retryButton)
+            }
+        }
+
+        add(leftPanel, BorderLayout.WEST)
+        add(centerPanel, BorderLayout.CENTER)
+        add(rightPanel, BorderLayout.EAST)
+
+        revalidate()
+        repaint()
+    }
+
+    private fun getStatusText(status: TaskStatus): String {
+        return when (status) {
+            TaskStatus.COMPLETED -> "Completed"
+            TaskStatus.FAILED -> "Failed"
+            TaskStatus.IN_PROGRESS -> "In Progress"
+            TaskStatus.TODO -> "To Do"
+        }
+    }
+
+    private fun getStatusColor(status: TaskStatus): JBColor {
+        return when (status) {
+            TaskStatus.COMPLETED -> AutoDevColors.COMPLETED_STATUS
+            TaskStatus.FAILED -> AutoDevColors.FAILED_STATUS
+            TaskStatus.IN_PROGRESS -> AutoDevColors.IN_PROGRESS_STATUS
+            TaskStatus.TODO -> AutoDevColors.TODO_STATUS
+        }
+    }
+}
