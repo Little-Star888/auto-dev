@@ -1,12 +1,9 @@
 package cc.unitmesh.devins.ui.compose.agent.codereview
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,14 +16,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cc.unitmesh.devins.ui.compose.agent.ComposeRenderer
-import cc.unitmesh.devins.ui.compose.agent.AgentMessageList
 import cc.unitmesh.devins.ui.compose.agent.ResizableSplitPane
 import cc.unitmesh.devins.ui.compose.icons.AutoDevComposeIcons
-import cc.unitmesh.devins.ui.compose.sketch.DiffSketchRenderer
 import cc.unitmesh.devins.ui.compose.theme.AutoDevColors
-
-// Expect function for platform-specific date formatting
-expect fun formatDate(timestamp: Long): String
+import kotlinx.coroutines.launch
 
 /**
  * Main Side-by-Side Code Review UI (redesigned)
@@ -48,17 +41,20 @@ fun CodeReviewSideBySideView(
             state.isLoading -> {
                 LoadingView()
             }
+
             state.error != null -> {
                 ErrorView(
                     error = state.error!!,
                     onRetry = { viewModel.refresh() }
                 )
             }
+
             state.commitHistory.isEmpty() -> {
                 EmptyCommitView(
                     onLoadDiff = { viewModel.refresh() }
                 )
             }
+
             else -> {
                 ThreeColumnLayout(
                     state = state,
@@ -77,10 +73,8 @@ private fun ThreeColumnLayout(
     state: CodeReviewState,
     viewModel: CodeReviewViewModel
 ) {
-    // Create a mock renderer for the right panel (AI messages)
-    // In a real implementation, this would be passed from the viewModel
     val renderer = remember { ComposeRenderer() }
-
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     ResizableSplitPane(
         modifier = Modifier.fillMaxSize(),
         initialSplitRatio = 0.25f,
@@ -92,18 +86,15 @@ private fun ThreeColumnLayout(
                 commits = state.commitHistory,
                 selectedIndex = state.selectedCommitIndex,
                 onCommitSelected = { index ->
-                    // Load diff for selected commit
-                    // Call refresh which will load the diff for the commit
-                    // Note: For cross-platform support, we use reflection or expect/actual pattern
-                    try {
-                        // Try to call loadDiffForCommit if it exists (JVM implementation)
-                        val method = viewModel::class.members.find { it.name == "loadDiffForCommit" }
-                        if (method != null) {
-                            method.call(viewModel, index)
-                        }
-                    } catch (e: Exception) {
-                        // Fallback: just update selection
-                        viewModel.selectFile(index)
+                    // Select commit (will trigger diff loading in subclasses like JvmCodeReviewViewModel)
+                    viewModel.selectCommit(index)
+                },
+                hasMoreCommits = state.hasMoreCommits,
+                isLoadingMore = state.isLoadingMore,
+                totalCommitCount = state.totalCommitCount,
+                onLoadMore = {
+                    scope.launch {
+                        viewModel.loadMoreCommits()
                     }
                 }
             )
@@ -117,13 +108,26 @@ private fun ThreeColumnLayout(
                 maxRatio = 0.8f,
                 first = {
                     // Center: Diff viewer
+                    var fileToView by remember { mutableStateOf<String?>(null) }
+                    
                     DiffCenterView(
                         diffFiles = state.diffFiles,
-                        selectedCommit = state.commitHistory.getOrNull(state.selectedCommitIndex)
+                        selectedCommit = state.commitHistory.getOrNull(state.selectedCommitIndex),
+                        onViewFile = { filePath ->
+                            fileToView = filePath
+                        },
+                        workspaceRoot = viewModel.workspace.rootPath
                     )
+                    
+                    // File viewer dialog
+                    fileToView?.let { path ->
+                        FileViewerDialog(
+                            filePath = path,
+                            onClose = { fileToView = null }
+                        )
+                    }
                 },
                 second = {
-                    // Right: AI code review messages
                     AIReviewPanel(
                         state = state,
                         viewModel = viewModel,
@@ -133,369 +137,6 @@ private fun ThreeColumnLayout(
             )
         }
     )
-}
-
-/**
- * Left panel: Commit history list (GitHub-style)
- */
-@Composable
-private fun CommitListView(
-    commits: List<CommitInfo>,
-    selectedIndex: Int,
-    onCommitSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(8.dp)
-    ) {
-        // Header
-        Text(
-            text = "Commits (${commits.size})",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
-        )
-
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Commit list
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(commits.size) { index ->
-                CommitListItem(
-                    commit = commits[index],
-                    isSelected = index == selectedIndex,
-                    onClick = { onCommitSelected(index) }
-                )
-            }
-        }
-    }
-}
-
-/**
- * Single commit list item (GitHub-style)
- */
-@Composable
-private fun CommitListItem(
-    commit: CommitInfo,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                AutoDevColors.Indigo.c600.copy(alpha = 0.1f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
-        shape = RoundedCornerShape(6.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 2.dp else 0.dp
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            // Commit message (first line)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = commit.message.lines().firstOrNull() ?: commit.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Extract PR/issue number if present (e.g., #453)
-                val prNumber = Regex("#(\\d+)").find(commit.message)?.value
-                if (prNumber != null) {
-                    Surface(
-                        color = AutoDevColors.Indigo.c600.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = prNumber,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AutoDevColors.Indigo.c600,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Author and timestamp
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = commit.author,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = formatRelativeTime(commit.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-
-            // Short hash
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = commit.shortHash,
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-        }
-    }
-}
-
-/**
- * Format relative time (e.g., "2 minutes ago", "Today 18:03")
- */
-private fun formatRelativeTime(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-    
-    return when {
-        diff < 60_000 -> "just now"
-        diff < 3600_000 -> "${diff / 60_000} minutes ago"
-        diff < 86400_000 -> {
-            val hours = diff / 3600_000
-            if (hours < 12) "$hours hours ago" else "Today ${formatDate(timestamp).split(" ").lastOrNull() ?: ""}"
-        }
-        diff < 172800_000 -> "Yesterday"
-        else -> formatDate(timestamp)
-    }
-}
-
-/**
- * Center panel: Diff viewer with collapsible file changes
- */
-@Composable
-private fun DiffCenterView(
-    diffFiles: List<DiffFileInfo>,
-    selectedCommit: CommitInfo?,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(8.dp)
-    ) {
-        // Header with commit info
-        if (selectedCommit != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                shape = RoundedCornerShape(6.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        text = selectedCommit.message.lines().firstOrNull() ?: selectedCommit.message,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = selectedCommit.author,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = selectedCommit.shortHash,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // Files changed header
-        Text(
-            text = "Files changed (${diffFiles.size})",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-        )
-
-        if (diffFiles.isEmpty()) {
-            // Empty state
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No file changes in this commit",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            // File list with collapsible diffs
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(diffFiles.size) { index ->
-                    CollapsibleFileDiffItem(
-                        file = diffFiles[index]
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Collapsible file diff item using DiffSketchRenderer
- */
-@Composable
-private fun CollapsibleFileDiffItem(
-    file: DiffFileInfo
-) {
-    var expanded by remember { mutableStateOf(false) }
-    
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(6.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // File header (clickable to expand/collapse)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Change type icon
-                    Icon(
-                        imageVector = when (file.changeType) {
-                            ChangeType.ADDED -> AutoDevComposeIcons.Add
-                            ChangeType.DELETED -> AutoDevComposeIcons.Delete
-                            ChangeType.MODIFIED -> AutoDevComposeIcons.Edit
-                            ChangeType.RENAMED -> AutoDevComposeIcons.DriveFileRenameOutline
-                        },
-                        contentDescription = file.changeType.name,
-                        tint = when (file.changeType) {
-                            ChangeType.ADDED -> AutoDevColors.Green.c600
-                            ChangeType.DELETED -> AutoDevColors.Red.c600
-                            ChangeType.MODIFIED -> AutoDevColors.Blue.c600
-                            ChangeType.RENAMED -> AutoDevColors.Amber.c600
-                        },
-                        modifier = Modifier.size(18.dp)
-                    )
-
-                    // File path
-                    Text(
-                        text = file.path,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    // Language badge
-                    file.language?.let { lang ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = lang,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Expand/collapse icon
-                Icon(
-                    imageVector = if (expanded) AutoDevComposeIcons.ExpandLess else AutoDevComposeIcons.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            // Expandable diff content using DiffSketchRenderer-style rendering
-            if (expanded && file.hunks.isNotEmpty()) {
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-                
-                Column(modifier = Modifier.padding(8.dp)) {
-                    file.hunks.forEach { hunk ->
-                        DiffHunkView(hunk)
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
-            }
-        }
-    }
 }
 
 /**
@@ -551,6 +192,7 @@ private fun AIReviewPanel(
                             Text("Start Review")
                         }
                     }
+
                     AnalysisStage.RUNNING_LINT,
                     AnalysisStage.ANALYZING_LINT,
                     AnalysisStage.GENERATING_FIX -> {
@@ -570,6 +212,7 @@ private fun AIReviewPanel(
                             Text("Stop")
                         }
                     }
+
                     AnalysisStage.COMPLETED -> {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -588,6 +231,7 @@ private fun AIReviewPanel(
                             )
                         }
                     }
+
                     AnalysisStage.ERROR -> {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -722,9 +366,9 @@ private fun ProgressOutputCard(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodySmall,
@@ -735,112 +379,6 @@ private fun ProgressOutputCard(
     }
 }
 
-/**
- * Diff hunk view (simplified from DiffSketchRenderer)
- */
-@Composable
-private fun DiffHunkView(hunk: DiffHunk) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                RoundedCornerShape(4.dp)
-            )
-            .padding(4.dp)
-    ) {
-        // Hunk header
-        Text(
-            text = "@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-
-        // Lines
-        hunk.lines.forEach { line ->
-            DiffLineView(line)
-        }
-    }
-}
-
-/**
- * Diff line view (using design system colors)
- */
-@Composable
-private fun DiffLineView(line: DiffLine) {
-    val (backgroundColor, textColor, prefix) = when (line.type) {
-        DiffLineType.ADDED -> Triple(
-            AutoDevColors.Diff.Dark.addedBg,
-            AutoDevColors.Green.c400,
-            "+"
-        )
-        DiffLineType.DELETED -> Triple(
-            AutoDevColors.Diff.Dark.deletedBg,
-            AutoDevColors.Red.c400,
-            "-"
-        )
-        DiffLineType.CONTEXT -> Triple(
-            Color.Transparent,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-            " "
-        )
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(backgroundColor)
-            .padding(horizontal = 4.dp, vertical = 1.dp)
-    ) {
-        // Old line number
-        Text(
-            text = "${line.oldLineNumber ?: ""}",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            color = AutoDevColors.Diff.Dark.lineNumber,
-            modifier = Modifier.width(32.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End
-        )
-        
-        Spacer(modifier = Modifier.width(4.dp))
-        
-        // New line number
-        Text(
-            text = "${line.newLineNumber ?: ""}",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            color = AutoDevColors.Diff.Dark.lineNumber,
-            modifier = Modifier.width(32.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Prefix (+/-)
-        Text(
-            text = prefix,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            color = textColor,
-            modifier = Modifier.width(12.dp)
-        )
-
-        // Content
-        Text(
-            text = line.content,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-/**
- * Fix result card for displaying AI-generated fixes
- */
 
 @Composable
 private fun FixResultCard(fix: FixResult) {
@@ -952,9 +490,6 @@ private fun FixResultCard(fix: FixResult) {
     }
 }
 
-// ===============================================================================
-// Supporting Views
-// ===============================================================================
 
 @Composable
 private fun LoadingView() {

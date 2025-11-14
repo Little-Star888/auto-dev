@@ -1,5 +1,7 @@
 package cc.unitmesh.devins.ui.compose.agent.codereview
 
+import cc.unitmesh.agent.tool.tracking.ChangeType
+import cc.unitmesh.devins.ui.compose.sketch.DiffHunk
 import kotlinx.serialization.Serializable
 
 /**
@@ -13,59 +15,24 @@ data class CodeReviewState(
     val diffFiles: List<DiffFileInfo> = emptyList(),
     val selectedFileIndex: Int = 0,
     val aiProgress: AIAnalysisProgress = AIAnalysisProgress(),
-    val fixResults: List<FixResult> = emptyList()
+    val fixResults: List<FixResult> = emptyList(),
+    // Infinite scroll support
+    val hasMoreCommits: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val totalCommitCount: Int? = null // Total available commits (if known)
 )
 
 /**
  * Information about a file in the diff
+ * Extends FileDiff from sketch package with CodeReview-specific fields
  */
 data class DiffFileInfo(
     val path: String,
     val oldPath: String? = null, // For renamed files
-    val changeType: ChangeType = ChangeType.MODIFIED,
+    val changeType: ChangeType = ChangeType.EDIT,
     val hunks: List<DiffHunk> = emptyList(),
     val language: String? = null
 )
-
-/**
- * Type of file change
- */
-enum class ChangeType {
-    ADDED,
-    DELETED,
-    MODIFIED,
-    RENAMED
-}
-
-/**
- * A continuous block of changes (hunk)
- */
-data class DiffHunk(
-    val oldStart: Int,
-    val oldLines: Int,
-    val newStart: Int,
-    val newLines: Int,
-    val lines: List<DiffLine>
-)
-
-/**
- * A single line in a diff
- */
-data class DiffLine(
-    val type: DiffLineType,
-    val content: String,
-    val oldLineNumber: Int? = null,
-    val newLineNumber: Int? = null
-)
-
-/**
- * Type of diff line
- */
-enum class DiffLineType {
-    CONTEXT,  // Unchanged line
-    ADDED,    // + line
-    DELETED   // - line
-}
 
 /**
  * AI analysis progress for streaming display

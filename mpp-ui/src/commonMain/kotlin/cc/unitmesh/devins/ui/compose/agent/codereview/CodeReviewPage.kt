@@ -5,9 +5,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import cc.unitmesh.agent.CodingAgent
 import cc.unitmesh.devins.ui.compose.icons.AutoDevComposeIcons
-import cc.unitmesh.devins.ui.compose.theme.AutoDevColors
 import cc.unitmesh.devins.workspace.Workspace
 import cc.unitmesh.devins.workspace.WorkspaceManager
 import cc.unitmesh.llm.KoogLLMService
@@ -23,7 +22,8 @@ import cc.unitmesh.llm.KoogLLMService
 fun CodeReviewPage(
     llmService: KoogLLMService?,
     onBack: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    codeReviewAgent: CodingAgent? = null
 ) {
     val currentWorkspace by WorkspaceManager.workspaceFlow.collectAsState()
 
@@ -32,8 +32,7 @@ fun CodeReviewPage(
         val workspace = currentWorkspace ?: WorkspaceManager.getCurrentOrEmpty()
         CodeReviewViewModel(
             workspace = workspace,
-            llmService = llmService,
-            codeReviewAgent = null // TODO: Initialize CodeReviewAgent if needed
+            codeReviewAgent = null
         )
     }
 
