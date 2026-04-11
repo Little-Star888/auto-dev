@@ -3,9 +3,9 @@
 > **One Platform. All Phases. Every Device.**  
 > 统一平台 · 全开发阶段 · 跨全设备
 
-**AutoDev Xiuper** is an AI-native, multi-agent development platform built on Kotlin Multiplatform. It covers all seven phases of
-the software development lifecycle (Requirements → Development → Review → Testing → Data → Deployment → Operations) and runs
-on 8+ platforms: IntelliJ IDEA, VS Code, CLI, Web, Desktop, Android, iOS, and Server.
+**AutoDev Xiuper** is an AI-native, multi-agent development platform built on Kotlin Multiplatform. Based on the current codebase,
+it focuses on document research, coding, code review, data query, artifact generation, and web interaction workflows, and targets
+IntelliJ IDEA, VS Code, CLI, Desktop JVM, Android, iOS, JS/WASM Web, and Server runtimes.
 
 ![ScreenShot](https://xiuper.com/screenshot.png)
 
@@ -26,67 +26,53 @@ on 8+ platforms: IntelliJ IDEA, VS Code, CLI, Web, Desktop, Android, iOS, and Se
 
 ### Modules
 
-| Module               | Platform            | Status              | Description                                           |
-|----------------------|---------------------|---------------------|-------------------------------------------------------|
-| **mpp-idea**         | IntelliJ IDEA       | ✅ Production        | Jewel UI, Agent toolwindow, code review, remote agent |
-| **mpp-vscode**       | VSCode              | ✅ Production        | Xiuper Agent                                          |
-| **mpp-ui** (Desktop) | macOS/Windows/Linux | ✅ Production        | Compose Multiplatform desktop app                     |
-| **mpp-ui** (CLI)     | Terminal (Node.js)  | ✅ Production        | Terminal UI (React/Ink), local/server mode            |
-| **mpp-ui** (Android) | Android             | ✅ Production        | Native Android app                                    |
-| **mpp-web** (Web)    | Web                 | ✅ Production        | Web app                                               |
-| **mpp-server**       | Server              | ✅ Production        | JVM (Ktor)                                            |
-| **mpp-ios**          | iOS                 | 🚧 Production Ready | Native iOS app (SwiftUI + Compose)                    |
+| Module | Platform | Current Status | Description |
+|--------|----------|----------------|-------------|
+| **mpp-core** | Shared KMP runtime | ✅ In default build | Shared agent engine, tools, MCP integration, AGENTS.md loading |
+| **mpp-ui** | Desktop / Android / iOS / JS / WASM | ✅ In default build | Main multiplatform UI surface and app entrypoints |
+| **mpp-server** | JVM server | ✅ In default build | Ktor-based remote coding agent server |
+| **mpp-idea** | IntelliJ IDEA | ✅ Composite build | IDEA plugin with dedicated renderers and toolwindow integration |
+| **mpp-vscode** | VS Code | ✅ Standalone package in repo | VS Code extension backed by `mpp-core` JS bindings |
+| **mpp-viewer / mpp-viewer-web** | Shared viewer stack | ✅ In default build | Diagram/viewer support used by UI surfaces |
+| **xiuper-ui / xiuper-fs / xiuper-e2e** | Shared support modules | ✅ In default build | UI foundation, cross-platform file system, and E2E support |
+| **mpp-ios** | iOS app shell | 🔄 Present in repo | Native iOS wrapper and build scripts, not included in current root Gradle graph |
+| **mpp-web** | Landing / demo web | 🔄 Present in repo | Vite-based landing page and demo web entry, not included in current root Gradle graph |
+
+### Current Status Snapshot
+
+- The default root Gradle build currently includes `mpp-core`, `mpp-ui`, `mpp-codegraph`, `mpp-server`, `mpp-viewer`, `mpp-viewer-web`, `xiuper-ui`, `xiuper-fs`, and `xiuper-e2e`, with `mpp-idea` as a composite build.
+- `mpp-ui` is the main cross-platform application module and already declares JVM, Android, iOS, JS, and WASM targets.
+- `mpp-vscode`, `mpp-ios`, and `mpp-web` are maintained in the repository, but they are not part of the current root `settings.gradle.kts` default build graph.
 
 ### Key Features
 
-**Xiuper Edition** marks a major milestone in AI-assisted development:
+**Xiuper Edition** currently exposes these code-backed capabilities:
 
-- **One Platform**: Unified Kotlin Multiplatform architecture—write once, run anywhere
-- **All Phases**: Seven specialized agents covering the full software development lifecycle
-  - Requirements → Development → Review → Testing → Data → Deployment → Operations
-- **Every Device**: Native support for 8+ platforms without compromising performance
-  - IDE: IntelliJ IDEA, VS Code
-  - Desktop: macOS, Windows, Linux (Compose Multiplatform)
-  - Mobile: Android, iOS (Native + Compose)
-  - Terminal: CLI (Node.js + React/Ink)
-  - Web: Web app
-  - Server: Remote agent server (Ktor)
+- **Unified KMP Runtime**: Shared agent/runtime code across JVM, Android, iOS, JS, and WASM targets
+- **Core Agents in Code**: `DocumentAgent`, `CodingAgent`, `CodeReviewAgent`, `ChatDBAgent`, and `ArtifactAgent`
+- **Tool-Driven Coding Agent**: Built-in file system, grep/glob, shell, web fetch, MCP tools, and renderer integration
+- **Project Rule Awareness**: Automatic `AGENTS.md` discovery and prompt injection from project hierarchy
+- **SubAgent Architecture**: Analysis, error recovery, NanoDSL, chart/plot, codebase investigation, domain dictionary, SQL revision, and web agent flows
+- **IDE Workflow Features**: PR review, pre-push review, diagram-related review flows, chat history, token usage, and model/tool configuration UIs
+- **Agent Ecosystem Support**: MCP, A2A agent commands, Claude Skill loading, and SpecKit command integration
 - **Multi-LLM Support**: OpenAI, Anthropic, Google, DeepSeek, Ollama, and more
-- **DevIns Language**: Executable agent scripting language for workflow automation
-- **MCP Protocol**: Extensible tool ecosystem via Model Context Protocol (MCP)
 - **Code Intelligence**: Tree-sitter based parsing for Java, Kotlin, Python, JavaScript/TypeScript, Go, Rust, C#
 - **Global Ready**: Full internationalization (Chinese/English)
 
 ## Built-in Agents
 
-AutoDev Xiuper includes seven specialized agents mapped to the SDLC:
+AutoDev Xiuper currently has the following code-backed top-level agents and adjacent agent capabilities:
 
-| Agent         | SDLC Phase   | Description                                                                                        | Capabilities                      | Status    |
-|---------------|--------------|----------------------------------------------------------------------------------------------------|-----------------------------------|-----------|
-| **Knowledge** | Requirements | Requirements understanding and knowledge construction with AI-native document reading and analysis | DocQL / Context Engineering       | ✅ Stable  |
-| **Coding**    | Development  | Autonomous coding agent with complete file system, shell, and tool access capabilities             | MCP / SubAgents / DevIns DSL      | ✅ Stable  |
-| **Review**    | Code Review  | Professional code review analyzing code quality, security, performance, and best practices         | Linter / Summary / AutoFix        | ✅ Stable  |
-| **Testing**   | Testing      | Automated testing agent that generates test cases, executes tests, and analyzes coverage           | E2E / Self-healing / Coverage     | 🚧 WIP    |
-| **ChatDB**    | Data         | Database conversation agent supporting Text-to-SQL and natural language data queries               | Schema Linking / Multi-DB / Query | ✅ Stable  |
-| **WebEdit**   | Deployment   | Web editing agent for browsing pages, selecting DOM elements, and interacting with web content     | Inspect / Chat / Mapping          | 🔄 Beta   |
-| **Ops**       | Operations   | Operations monitoring agent for log analysis, performance monitoring, and alert handling           | Logs / Metrics / Alerts           | 🚧 Coming |
+| Agent | Area | Description | Capabilities | Status |
+|-------|------|-------------|--------------|--------|
+| **Document / Knowledge** | Requirements / Research | `DocumentAgent` for document querying and feature tree generation | DocQL / analysis sub-agent / feature tree | ✅ Code-backed |
+| **Coding** | Development | `CodingAgent` with workspace tools and orchestration | File system / shell / MCP / sub-agents / AGENTS.md | ✅ Code-backed |
+| **Review** | Code Review | `CodeReviewAgent` for review, lint summary, and fix generation | Linter / diff review / PR review services | ✅ Code-backed |
+| **ChatDB** | Data | `ChatDBAgent` for natural-language database interaction | Schema linking / SQL generation / SQL revision | ✅ Code-backed |
+| **Artifact** | Rapid Prototyping | `ArtifactAgent` for self-contained runnable outputs | HTML / React / Node.js / Python / SVG / Mermaid | ✅ Code-backed |
+| **Web Agent / WebEdit** | Web Interaction | Web interaction capability exists as web-agent and WebEdit UI flows | Page inspection / DOM context / chat-assisted actions | 🔄 Experimental |
 
-Each agent focuses on a specific phase of the lifecycle, providing end-to-end AI assistance—from requirements to production operations.
-
-### Special-Purpose Agents
-
-In addition to SDLC agents, AutoDev Xiuper includes specialized agents for specific use cases:
-
-| Agent        | Purpose     | Description                                                                                                    | Capabilities                                          | Status   |
-|--------------|-------------|----------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|----------|
-| **Artifact** | Quick Demos | Generate self-contained, executable artifacts (HTML/JS, React, Node.js, Python) inspired by Claude's Artifacts | Interactive preview / Auto-fix / Multi-format support | ✅ Stable |
-
-**Artifact Agent** focuses on creating complete, runnable artifacts without file system or shell access. It's ideal for:
-- Quick prototyping and demos
-- Interactive web applications
-- Data visualizations
-- Python scripts with dependencies
-- SVG graphics and Mermaid diagrams
+Testing-related capability currently exists mainly through `xiuper-e2e` and E2E-oriented agent/tooling work, but it is not yet represented as a clearly separated top-level agent in the current code layout.
 
 ### SubAgents
 
