@@ -9,6 +9,10 @@ IntelliJ IDEA, VS Code, CLI, Desktop JVM, Android, iOS, JS/WASM Web, and Server 
 
 ![ScreenShot](https://xiuper.com/screenshot.png)
 
+## One Platform Architecture
+
+![AutoDev Xiuper One Platform Architecture](https://xiuper.com/xiuper-arch.svg)
+
 ## Get Started
 
 ### Download AutoDev Xiuper
