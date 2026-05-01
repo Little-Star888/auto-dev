@@ -21,6 +21,14 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.jetbrains.kotlin" && requested.name.startsWith("kotlin-stdlib")) {
+                useVersion(libs.versions.kotlin.get())
+            }
+        }
+    }
 }
 
 // Convenience task to publish mpp-core and mpp-ui to mavenLocal for mpp-idea composite build

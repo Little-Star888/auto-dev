@@ -10,8 +10,8 @@ pluginManagement {
     }
 
     plugins {
-        kotlin("jvm") version "2.2.0"
-        kotlin("plugin.compose") version "2.2.0"
+        kotlin("jvm") version "2.3.10"
+        kotlin("plugin.compose") version "2.3.10"
         id("org.jetbrains.intellij.platform") version "2.10.2"
     }
 }

@@ -23,6 +23,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import kotlin.time.ExperimentalTime
 
 private val logger = KotlinLogging.logger {}
 
@@ -65,6 +66,7 @@ private data class CopilotApiToken(
  * val executor = ExecutorFactory.createAsync(config)
  * ```
  */
+@OptIn(ExperimentalTime::class)
 class GithubCopilotClientProvider : LLMClientProvider {
     private val json = Json { ignoreUnknownKeys = true }
     private val httpClient = HttpClient(CIO)

@@ -16,9 +16,9 @@ gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS
 @Suppress("DSL_SCOPE_VIOLATION")
 plugins {
     id("java") // Java support
-    kotlin("jvm") version "2.2.0"
-    kotlin("plugin.compose") version "2.2.0"
-    kotlin("plugin.serialization") version "2.2.0"
+    kotlin("jvm") version "2.3.10"
+    kotlin("plugin.compose") version "2.3.10"
+    kotlin("plugin.serialization") version "2.3.10"
     id("org.jetbrains.intellij.platform") version "2.10.2"
     id("org.jetbrains.changelog") version "2.2.0"
     id("org.jetbrains.grammarkit") version "2022.3.2.2"

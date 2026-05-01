@@ -5,19 +5,24 @@ import ai.koog.prompt.dsl.Prompt
 import ai.koog.prompt.executor.clients.ConnectionTimeoutConfig
 import ai.koog.prompt.executor.clients.LLMClient
 import ai.koog.prompt.executor.clients.openai.base.AbstractOpenAILLMClient
-import ai.koog.prompt.executor.clients.openai.base.OpenAIBasedSettings
+import ai.koog.prompt.executor.clients.openai.base.OpenAIBaseSettings
+import ai.koog.prompt.executor.clients.openai.base.OpenAICompatibleToolDescriptorSchemaGenerator
 import ai.koog.prompt.executor.clients.openai.base.models.OpenAIMessage
 import ai.koog.prompt.executor.clients.openai.base.models.OpenAITool
 import ai.koog.prompt.executor.clients.openai.base.models.OpenAIToolChoice
-import ai.koog.prompt.executor.model.LLMChoice
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.message.Message
 import ai.koog.prompt.params.LLMParams
-import ai.koog.prompt.streaming.StreamFrameFlowBuilder
+import ai.koog.prompt.streaming.StreamFrame
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Configuration settings for custom OpenAI-compatible APIs (like GLM, custom endpoints, etc.)
@@ -30,7 +35,7 @@ class CustomOpenAIClientSettings(
     baseUrl: String,
     chatCompletionsPath: String = "chat/completions",
     timeoutConfig: ConnectionTimeoutConfig = ConnectionTimeoutConfig()
-) : OpenAIBasedSettings(baseUrl, chatCompletionsPath, timeoutConfig)
+) : OpenAIBaseSettings(baseUrl, chatCompletionsPath, timeoutConfig)
 
 /**
  * Request model for custom OpenAI-compatible chat completion
@@ -122,6 +127,7 @@ data class CustomOpenAIChatCompletionStreamResponse(
  * @param baseClient Optional custom HTTP client
  * @param clock Clock instance for tracking timestamps
  */
+@OptIn(ExperimentalTime::class)
 class CustomOpenAILLMClient(
     apiKey: String,
     baseUrl: String,
@@ -143,18 +149,15 @@ class CustomOpenAILLMClient(
             }
         }
     },
+    "custom-openai",
     clock,
-    staticLogger
+    staticLogger,
+    OpenAICompatibleToolDescriptorSchemaGenerator()
 ) {
 
     private companion object {
         private val staticLogger = KotlinLogging.logger { }
 
-        init {
-            // Register custom OpenAI JSON schema generators for structured output
-            // Use OpenAI provider since custom providers are OpenAI-compatible
-            registerOpenAIJsonSchemaGenerators(LLMProvider.OpenAI)
-        }
     }
 
     override fun llmProvider(): LLMProvider = LLMProvider.OpenAI // OpenAI-compatible provider
@@ -194,7 +197,7 @@ class CustomOpenAILLMClient(
         return json.encodeToString(request)
     }
 
-    override fun processProviderChatResponse(response: CustomOpenAIChatCompletionResponse): List<LLMChoice> {
+    override fun processProviderChatResponse(response: CustomOpenAIChatCompletionResponse): List<List<Message.Response>> {
         require(response.choices.isNotEmpty()) { "Empty choices in response" }
         return response.choices.map {
             it.message.toMessageResponses(
@@ -210,13 +213,23 @@ class CustomOpenAILLMClient(
     override fun decodeResponse(data: String): CustomOpenAIChatCompletionResponse =
         json.decodeFromString(data)
 
-    override suspend fun StreamFrameFlowBuilder.processStreamingChunk(chunk: CustomOpenAIChatCompletionStreamResponse) {
-        chunk.choices.firstOrNull()?.let { choice ->
-            choice.delta.content?.let { emitAppend(it) }
-            choice.delta.toolCalls?.forEach { toolCall ->
-                upsertToolCall(0, toolCall.id, toolCall.function.name, toolCall.function.arguments)
+    override fun processStreamingResponse(
+        response: Flow<CustomOpenAIChatCompletionStreamResponse>
+    ): Flow<StreamFrame> = flow {
+        response.collect { chunk ->
+            chunk.choices.firstOrNull()?.let { choice ->
+                choice.delta.content?.let { emit(StreamFrame.TextDelta(it)) }
+                choice.delta.toolCalls?.forEach { toolCall ->
+                    emit(
+                        StreamFrame.ToolCallDelta(
+                            id = toolCall.id,
+                            name = toolCall.function.name,
+                            content = toolCall.function.arguments
+                        )
+                    )
+                }
+                choice.finishReason?.let { emit(StreamFrame.End(it, createMetaInfo(chunk.usage))) }
             }
-            choice.finishReason?.let { emitEnd(it, createMetaInfo(chunk.usage)) }
         }
     }
 
@@ -225,4 +238,3 @@ class CustomOpenAILLMClient(
         throw UnsupportedOperationException("Moderation is not supported by custom OpenAI-compatible APIs.")
     }
 }
-

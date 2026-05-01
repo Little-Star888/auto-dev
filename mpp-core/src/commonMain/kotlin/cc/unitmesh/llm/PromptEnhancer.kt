@@ -29,7 +29,7 @@ class PromptEnhancer(
      */
     suspend fun enhance(userInput: String, language: String = "zh"): String {
         if (userInput.isBlank()) {
-            logger.warn("Empty user input provided for enhancement")
+            logger.warn { "Empty user input provided for enhancement" }
             return userInput
         }
 
@@ -43,7 +43,7 @@ class PromptEnhancer(
             // Render the enhancement prompt
             val enhancementPrompt = templateEngine.render(template, mapOf("context" to context))
 
-            logger.info("Sending enhancement request to LLM")
+            logger.info { "Sending enhancement request to LLM" }
 
             // Call LLM for enhancement
             val result = StringBuilder()
@@ -58,12 +58,12 @@ class PromptEnhancer(
             // Extract enhanced content from LLM response
             val enhancedContent = extractEnhancedContent(result.toString())
 
-            logger.info("Successfully enhanced prompt: ${userInput.take(50)}... -> ${enhancedContent.take(50)}...")
+            logger.info { "Successfully enhanced prompt: ${userInput.take(50)}... -> ${enhancedContent.take(50)}..." }
 
             return enhancedContent.ifEmpty { userInput }
 
         } catch (e: Exception) {
-            logger.error("Failed to enhance prompt: ${e.message}", e)
+            logger.error(e) { "Failed to enhance prompt: ${e.message}" }
             return userInput // Return original input on error
         }
     }
@@ -90,7 +90,7 @@ class PromptEnhancer(
         return try {
             domainDictService?.loadContent() ?: ""
         } catch (e: Exception) {
-            logger.warn("Failed to load domain dictionary: ${e.message}")
+            logger.warn { "Failed to load domain dictionary: ${e.message}" }
             ""
         }
     }
@@ -102,7 +102,7 @@ class PromptEnhancer(
         return try {
             findAndReadReadme()
         } catch (e: Exception) {
-            logger.warn("Failed to load README: ${e.message}")
+            logger.warn { "Failed to load README: ${e.message}" }
             ""
         }
     }
@@ -163,7 +163,7 @@ class PromptEnhancer(
             return llmResponse.trim()
 
         } catch (e: Exception) {
-            logger.warn("Failed to parse LLM response, returning as-is: ${e.message}")
+            logger.warn { "Failed to parse LLM response, returning as-is: ${e.message}" }
             return llmResponse.trim()
         }
     }

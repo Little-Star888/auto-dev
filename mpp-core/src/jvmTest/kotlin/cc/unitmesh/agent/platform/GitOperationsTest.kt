@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -24,7 +25,7 @@ class GitOperationsTest {
     @Before
     fun setup() {
         // Create a temporary git repository for testing
-        tempDir = createTempDir("git-test")
+        tempDir = createTempDirectory("git-test").toFile()
         gitOps = GitOperations(tempDir.absolutePath)
         
         // Initialize git repo
@@ -207,4 +208,3 @@ class GitOperationsTest {
         return output
     }
 }
-

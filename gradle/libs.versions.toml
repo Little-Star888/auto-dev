@@ -1,6 +1,6 @@
 [versions]
 # Kotlin & Compose
-kotlin = "2.2.0"
+kotlin = "2.3.10"
 compose = "1.9.2"
 
 # Gradle Plugins
@@ -30,7 +30,7 @@ logback = "1.5.19"
 kotlinLogging = "7.0.13"
 
 # AI/LLM
-koog = "0.5.2"
+koog = "0.8.0"
 jtokkit = "1.1.0"
 mcpKotlinSdk = "0.7.2"
 

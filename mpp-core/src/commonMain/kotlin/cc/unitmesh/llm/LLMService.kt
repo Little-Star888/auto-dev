@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.flow
 import kotlinx.datetime.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * LLM 服务
@@ -26,6 +27,7 @@ import kotlinx.datetime.Clock
  * @param compilerService 可选的编译器服务，用于编译 DevIns 命令
  *                        如果不提供，将使用 DevInsCompilerService.getInstance()
  */
+@OptIn(ExperimentalTime::class)
 class LLMService(
     private val config: ModelConfig,
     private val compressionConfig: CompressionConfig = CompressionConfig(),
@@ -83,7 +85,7 @@ class LLMService(
                 .cancellable()
                 .collect { frame ->
                     when (frame) {
-                        is StreamFrame.Append -> {
+                        is StreamFrame.TextDelta -> {
                             chunkCount++
                             totalChars += frame.text.length
                             if (chunkCount == 1) {
@@ -95,6 +97,11 @@ class LLMService(
                                 frame.text.contains("<reasoning") || frame.text.contains("</reasoning")) {
                                 logger.debug { "🧠 [LLM] Thinking tag detected in chunk: ${frame.text.take(100)}..." }
                             }
+                            emit(frame.text)
+                        }
+                        is StreamFrame.TextComplete -> {
+                            chunkCount++
+                            totalChars += frame.text.length
                             emit(frame.text)
                         }
                         is StreamFrame.End -> {
@@ -121,7 +128,10 @@ class LLMService(
 
                             messagesSinceLastCompression++
                         }
-                        is StreamFrame.ToolCall -> { /* Tool calls (可以后续扩展) */ }
+                        is StreamFrame.ReasoningDelta,
+                        is StreamFrame.ReasoningComplete,
+                        is StreamFrame.ToolCallDelta,
+                        is StreamFrame.ToolCallComplete -> { /* Tool calls and reasoning frames can be handled later. */ }
                     }
                 }
         } catch (e: Exception) {

@@ -6,10 +6,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.ExperimentalTime
 
 /**
  * 测试 CustomOpenAILLMClient 的基本功能
  */
+@OptIn(ExperimentalTime::class)
 class CustomOpenAILLMClientTest {
 
     @Test
@@ -107,4 +109,3 @@ class CustomOpenAILLMClientTest {
         }
     }
 }
-

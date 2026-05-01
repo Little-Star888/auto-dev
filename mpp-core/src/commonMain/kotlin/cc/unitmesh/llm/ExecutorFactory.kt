@@ -6,6 +6,7 @@ import ai.koog.prompt.executor.llms.all.*
 import cc.unitmesh.llm.clients.CustomOpenAILLMClient
 import cc.unitmesh.llm.provider.LLMClientProvider
 import cc.unitmesh.llm.provider.LLMClientRegistry
+import kotlin.time.ExperimentalTime
 
 /**
  * Try to auto-register GitHub Copilot provider.
@@ -42,6 +43,7 @@ internal expect fun createExecutorBlocking(
  * LLMClientRegistry.register(GithubCopilotClientProvider())
  * ```
  */
+@OptIn(ExperimentalTime::class)
 object ExecutorFactory {
     
     /**

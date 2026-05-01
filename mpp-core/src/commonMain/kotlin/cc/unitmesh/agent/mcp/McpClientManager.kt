@@ -1,10 +1,12 @@
 package cc.unitmesh.agent.mcp
 
 import cc.unitmesh.agent.logging.getLogger
-import io.modelcontextprotocol.kotlin.sdk.Implementation
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.Transport
+import io.modelcontextprotocol.kotlin.sdk.types.ContentBlock
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -106,15 +108,8 @@ class McpClientManager(
                     name = tool.name,
                     description = tool.description ?: "",
                     serverName = serverName,
-                    inputSchema = tool.inputSchema?.let { 
-                        // inputSchema is Tool.Input, need to convert to JsonObject first
-                        val schemaJson = Json.decodeFromString<JsonObject>(
-                            Json.encodeToString(
-                                io.modelcontextprotocol.kotlin.sdk.Tool.Input.serializer(),
-                                it
-                            )
-                        )
-                        json.encodeToString(JsonObject.serializer(), schemaJson)
+                    inputSchema = tool.inputSchema?.let {
+                        json.encodeToString(ToolSchema.serializer(), it)
                     },
                     enabled = false
                 )
@@ -238,12 +233,12 @@ class McpClientManager(
         }
 
         // Call tool
-        val result = client.callTool(toolName, arguments = args, compatibility = true, options = null)
+        val result = client.callTool(toolName, arguments = args, options = null)
 
         // Convert result to JSON string
-        if (result?.content?.isNotEmpty() == true) {
+        if (result.content.isNotEmpty()) {
             json.encodeToString(
-                io.modelcontextprotocol.kotlin.sdk.PromptMessageContent.serializer(),
+                ContentBlock.serializer(),
                 result.content.first()
             )
         } else {

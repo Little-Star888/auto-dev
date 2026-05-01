@@ -38,8 +38,9 @@ class MiniMaxModelTest {
         assertEquals("MiniMax-M2.1", model.id)
         assertEquals(1_000_000L, model.contextLength)
         assertEquals(128_000, model.maxOutputTokens)
-        assertTrue(model.capabilities.contains(LLMCapability.Completion))
-        assertTrue(model.capabilities.contains(LLMCapability.Tools))
+        val capabilities = model.capabilities.orEmpty()
+        assertTrue(capabilities.contains(LLMCapability.Completion))
+        assertTrue(capabilities.contains(LLMCapability.Tools))
     }
 
     @Test
@@ -64,8 +65,9 @@ class MiniMaxModelTest {
     fun `test minimax vision model capabilities`() {
         val model = ModelRegistry.createModel(LLMProviderType.MINIMAX, "MiniMax-Text-01V")
         assertNotNull(model, "MiniMax-Text-01V model should be created")
-        assertTrue(model.capabilities.contains(LLMCapability.Vision.Image))
-        assertTrue(model.capabilities.contains(LLMCapability.Document))
+        val capabilities = model.capabilities.orEmpty()
+        assertTrue(capabilities.contains(LLMCapability.Vision.Image))
+        assertTrue(capabilities.contains(LLMCapability.Document))
     }
 
     @Test
@@ -100,4 +102,3 @@ class MiniMaxModelTest {
         assertEquals(128_000L, model.contextLength)
     }
 }
-

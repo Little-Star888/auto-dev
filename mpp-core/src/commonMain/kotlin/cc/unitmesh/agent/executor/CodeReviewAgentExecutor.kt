@@ -48,7 +48,7 @@ class CodeReviewAgentExecutor(
     ): CodeReviewResult {
         resetExecution()
         conversationManager = ConversationManager(llmService, systemPrompt)
-        logger.info(Json.encodeToString(linterSummary))
+        logger.info { Json.encodeToString(linterSummary) }
         val initialUserMessage = buildInitialUserMessage(task, linterSummary)
 
         while (shouldContinue()) {
