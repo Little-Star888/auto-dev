@@ -33,9 +33,9 @@ import javax.swing.table.DefaultTableModel
 
 object SketchCodeInspection {
     fun showErrors(errors: List<SketchInspectionError>, panel: JPanel) {
-        val columnNames = arrayOf("Line", "Description", "Highlight Type", "Name")
-        val data = errors.map {
-            arrayOf(it.lineNumber, it.description, it.highlightType.toString(), it.toolId)
+        val columnNames = arrayOf<Any?>("Line", "Description", "Highlight Type", "Name")
+        val data: Array<Array<Any?>> = errors.map {
+            arrayOf<Any?>(it.lineNumber, it.description, it.highlightType.toString(), it.toolId)
         }.toTypedArray()
 
         val tableModel = DefaultTableModel(data, columnNames)
@@ -102,7 +102,7 @@ object SketchCodeInspection {
             val indicator = DaemonProgressIndicator()
             val result: Map<LocalInspectionToolWrapper, List<ProblemDescriptor>> = InspectionEngine.inspectEx(
                 toolsCopy, psiFile, psiFile.textRange, psiFile.textRange, false, false, true,
-                indicator, PairProcessor.alwaysTrue<LocalInspectionToolWrapper?, ProblemDescriptor?>()
+                indicator, PairProcessor.alwaysTrue<LocalInspectionToolWrapper, ProblemDescriptor>()
             )
 
             val errors = mutableListOf<SketchInspectionError>()

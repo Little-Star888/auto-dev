@@ -1,16 +1,16 @@
 [versions]
 # Kotlin & Compose
-kotlin = "2.3.10"
+kotlin = "2.3.20"
 compose = "1.9.2"
 
 # Gradle Plugins
 dokka = "1.9.10"
-changelog = "2.2.1"
+changelog = "2.5.0"
 gradleIntelliJPlugin = "2.1.0"
-intellijPlatform = "2.10.2"
+intellijPlatform = "2.11.0"
 grammarkit = "2022.3.2.2"
-qodana = "0.1.13"
-kover = "0.7.5"
+qodana = "2025.3.2"
+kover = "0.9.7"
 ktlint = "13.1.0"
 android = "8.10.0"
 sqldelight = "2.1.0"
