@@ -81,7 +81,7 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
-                implementation(compose.materialIconsExtended)
+                implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
 
                 // JSON serialization
                 implementation(libs.kotlinx.serialization.json)
