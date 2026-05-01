@@ -28,29 +28,25 @@ config.module = config.module || {};
 config.module.unknownContextCritical = false;
 config.module.exprContextCritical = false;
 
-// Add webpack plugin to ignore wasm-git's dynamic requires
-const webpack = require('webpack');
-config.plugins.push(
-    new webpack.ContextReplacementPlugin(
-        /wasm-git/,
-        (data) => {
-            // Ignore all dynamic requires in wasm-git
-            delete data.dependencies[0].critical;
-            return data;
-        }
-    )
-);
+config.plugins = config.plugins || [];
 
-// Ignore specific problematic requires in wasm-git
-config.plugins.push(
-    new webpack.IgnorePlugin({
-        resourceRegExp: /^\.\/$/,
-        contextRegExp: /wasm-git/
-    })
-);
+config.plugins.push({
+    apply(compiler) {
+        const normalModuleFactory = compiler && compiler.hooks && compiler.hooks.normalModuleFactory;
+        if (!normalModuleFactory) return;
+
+        normalModuleFactory.tap('AutoDevIgnoreWasmGitDynamicRequire', (factory) => {
+            factory.hooks.beforeResolve.tap('AutoDevIgnoreWasmGitDynamicRequire', (request) => {
+                if (request && /wasm-git/.test(request.context || '') && request.request === './') {
+                    return false;
+                }
+                return undefined;
+            });
+        });
+    }
+});
 
 // Copy tree-sitter.wasm and language WASM files to the output directory
-config.plugins = config.plugins || [];
 config.plugins.push(
     new CopyWebpackPlugin({
         patterns: [
